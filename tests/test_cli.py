@@ -63,6 +63,18 @@ class TestMainPlainTextMode:
         assert result.exit_code == 1
         assert "Error: boom" in result.output
 
+    def test_reports_both_destinations_configured_as_a_clean_error_and_exits_1(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Report the NotifierFactory conflict error the same way as any other notification failure."""
+        monkeypatch.setenv("HOOKBELL_SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:hookbell")
+
+        result = CliRunner().invoke(cli.main, input="Hello world\n")
+
+        assert result.exit_code == 1
+        assert "exactly one destination" in result.output
+
 
 class TestMainClaudeCodeHookMode:
     """Tests for main() when stdin is a Claude Code hook payload."""
@@ -82,6 +94,22 @@ class TestMainClaudeCodeHookMode:
 
     def test_swallows_notification_failures_and_still_exits_0(self, tmp_path: Path) -> None:
         payload = json.dumps({"hook_event_name": "Stop", "transcript_path": str(tmp_path / "missing.jsonl")})
+
+        result = CliRunner().invoke(cli.main, input=payload)
+
+        assert result.exit_code == 0
+
+    def test_swallows_both_destinations_configured_and_still_exits_0(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Swallow the NotifierFactory conflict error the same way as any other notification failure."""
+        monkeypatch.setenv("HOOKBELL_SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:hookbell")
+        entry = {"message": {"content": [{"type": "text", "text": "Hello from assistant"}]}}
+        transcript_path = tmp_path / "transcript.jsonl"
+        transcript_path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+        payload = json.dumps({"hook_event_name": "Stop", "transcript_path": str(transcript_path)})
 
         result = CliRunner().invoke(cli.main, input=payload)
 

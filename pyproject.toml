@@ -4,6 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
+    # Type stubs for boto3's SNS client, needed for `uv run mypy` (strict mode) to type-check
+    # hookbell/notifiers/sns.py's session.client("sns") call and its publish() response.
+    "boto3-stubs[sns]>=1.40.64",
     "bump-my-version",
     "invokelint[basic]>=0.19.0",
     "pytest-mock>=3.11.1",
@@ -46,6 +49,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    # AWS SDK backing hookbell/notifiers/sns.py's SnsNotifier.notify() call to sns.publish(). The
+    # >=1.37.38 floor is the version uv resolved when this dependency was added, not a specific
+    # feature this code requires.
+    "boto3>=1.37.38",
     # Supplies the CA bundle for ssl.create_default_context(cafile=certifi.where()) in
     # hookbell/notifiers/slack.py. Without it, that call would fall back to the platform's own CA
     # store, which is missing or outdated on some minimal environments (e.g. slim containers) and

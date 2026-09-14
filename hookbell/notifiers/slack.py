@@ -21,17 +21,23 @@ class SlackNotifier(Notifier):
 
     HEADERS: ClassVar[dict[str, str]] = {"Content-Type": "application/json"}
     WEBHOOK_URL_SECRET_PATH = Path("/run/secrets/slack_webhook_url")
+    WEBHOOK_URL_ENVIRONMENT_VARIABLE = "SLACK_WEBHOOK_URL"
 
     def __init__(self, webhook_url: str) -> None:
         self.webhook_url = webhook_url
         self.logger = getLogger(__name__)
 
     @classmethod
+    def is_configured(cls) -> bool:
+        """Return whether a webhook URL is available from either the secret file or the environment."""
+        return cls.WEBHOOK_URL_SECRET_PATH.exists() or cls.WEBHOOK_URL_ENVIRONMENT_VARIABLE in os.environ
+
+    @classmethod
     def from_environment(cls) -> SlackNotifier:
         """Build a SlackNotifier from the Docker secret, falling back to the environment variable."""
         if cls.WEBHOOK_URL_SECRET_PATH.exists():
             return cls(webhook_url=cls.WEBHOOK_URL_SECRET_PATH.read_text(encoding="utf-8").strip())
-        return cls(webhook_url=os.environ["SLACK_WEBHOOK_URL"])
+        return cls(webhook_url=os.environ[cls.WEBHOOK_URL_ENVIRONMENT_VARIABLE])
 
     def notify(self, text: str) -> None:
         """Post text to Slack as a single section block."""
