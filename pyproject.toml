@@ -6,13 +6,14 @@ build-backend = "setuptools.build_meta"
 dev = [
     "bump-my-version",
     "invokelint[basic]>=0.19.0",
+    "pytest-mock>=3.11.1",
     "pyvelocity; python_version >= '3.9'",
 ]
 
 [project]
 name = "hookbell"
 version = "0.1.0"
-description = "Notifies user something you want by Slack."
+description = "Notifies Slack, as a Claude Code hook or as a notify-compatible CLI."
 readme = "README.md"
 requires-python = ">=3.7"
 license = {file = "LICENSE"}
@@ -46,7 +47,17 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "click>=7.0"
+    # Supplies the CA bundle for ssl.create_default_context(cafile=certifi.where()) in
+    # hookbell/notifiers/slack.py. Without it, that call would fall back to the platform's own CA
+    # store, which is missing or outdated on some minimal environments (e.g. slim containers) and
+    # would make the HTTPS POST to the Slack webhook fail with a certificate verification error.
+    "certifi>=2026.7.22",
+    # Provides the `@click.command()` CLI framework behind the `hookbell` console script:
+    # argument/--help handling and ClickException-based clean "Error: ..." messages with a
+    # guaranteed exit code (see hookbell/cli.py). Without it, hookbell would have no CLI entry
+    # point at all. The >=7.0 floor is the cookiecutter template's baseline, not a specific
+    # feature this code requires.
+    "click>=7.0",
 ]
 
 [project.urls]

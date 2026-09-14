@@ -3,19 +3,16 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
-collect_ignore = ["setup.py"]
+from hookbell.notifiers.slack import SlackNotifier
 
 
-@pytest.fixture
-def response() -> dict[Any, Any] | None:
-    """Sample pytest fixture.
-
-    See more at: http://doc.pytest.org/en/latest/fixture.html
-    """
-    # import requests  # noqa: ERA001
-    # return requests.get("https://github.com/audreyr/cookiecutter-pypackage")  # noqa: ERA001
-    return None
+@pytest.fixture(autouse=True)
+def _isolate_slack_webhook_secret_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Point the Docker secret path at a location tests control instead of a real host file."""
+    unused_path = tmp_path_factory.mktemp("run-secrets") / "slack_webhook_url"
+    monkeypatch.setattr(SlackNotifier, "WEBHOOK_URL_SECRET_PATH", unused_path)
