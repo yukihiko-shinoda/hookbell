@@ -84,7 +84,7 @@ Ready to contribute? Here's how to set up `Hookbell` for local development.
    ```console
    uv run inv style --check
    uv run pytest
-   uv install --python 3.7
+   uv install --python 3.8
    uv run pytest
    ```
 
