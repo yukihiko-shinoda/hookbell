@@ -12,7 +12,7 @@ dev = [
 
 [project]
 name = "hookbell"
-version = "0.1.0"
+version = "0.1.1"
 description = "Notifies Slack, as a Claude Code hook or as a notify-compatible CLI."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -72,7 +72,7 @@ hookbell = "hookbell.cli:main"
 skips = ["tests/*"]
 
 [tool.bumpversion]
-current_version = "0.1.0"
+current_version = "0.1.1"
 commit = true
 tag = true
 
