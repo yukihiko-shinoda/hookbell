@@ -42,6 +42,20 @@ class TestSlackNotifierFromEnvironment:
         assert notifier.webhook_url == "https://hooks.slack.com/services/T111/B111/YYY"
 
 
+class TestSlackNotifierIsConfigured:
+    """Tests for SlackNotifier.is_configured."""
+
+    def test_returns_false_when_neither_secret_nor_variable_is_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+
+        assert SlackNotifier.is_configured() is False
+
+    def test_returns_true_when_the_environment_variable_is_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/T000/B000/XXX")
+
+        assert SlackNotifier.is_configured() is True
+
+
 class TestSlackNotifierNotify:
     """Tests for SlackNotifier.notify."""
 
