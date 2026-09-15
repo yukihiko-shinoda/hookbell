@@ -20,8 +20,8 @@ class SnsNotifier(Notifier):
     https://docs.aws.amazon.com/chatbot/latest/adminguide/custom-notifs.html#event-schema
     """
 
-    TOPIC_ARN_SECRET_PATH = Path("/run/secrets/hookbell-sns-topic-arn")
-    AWS_PROFILE_SECRET_PATH = Path("/run/secrets/hookbell-aws-profile")
+    TOPIC_ARN_SECRET_PATH = Path("/run/secrets/hookbell_sns_topic_arn")
+    AWS_PROFILE_SECRET_PATH = Path("/run/secrets/hookbell_aws_profile")
     TOPIC_ARN_ENVIRONMENT_VARIABLE = "HOOKBELL_SNS_TOPIC_ARN"
     AWS_PROFILE_ENVIRONMENT_VARIABLE = "HOOKBELL_AWS_PROFILE"
 

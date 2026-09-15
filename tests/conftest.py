@@ -26,5 +26,5 @@ def _isolate_sns_secret_paths(
 ) -> None:
     """Point the Docker secret paths at locations tests control instead of real host files."""
     run_secrets = tmp_path_factory.mktemp("run-secrets")
-    monkeypatch.setattr(SnsNotifier, "TOPIC_ARN_SECRET_PATH", run_secrets / "hookbell-sns-topic-arn")
-    monkeypatch.setattr(SnsNotifier, "AWS_PROFILE_SECRET_PATH", run_secrets / "hookbell-aws-profile")
+    monkeypatch.setattr(SnsNotifier, "TOPIC_ARN_SECRET_PATH", run_secrets / "hookbell_sns_topic_arn")
+    monkeypatch.setattr(SnsNotifier, "AWS_PROFILE_SECRET_PATH", run_secrets / "hookbell_aws_profile")
