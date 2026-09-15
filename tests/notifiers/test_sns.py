@@ -53,9 +53,9 @@ class TestSnsNotifierFromEnvironment:
         """Read the Docker secret files when they exist, ignoring the environment variables."""
         monkeypatch.setenv("HOOKBELL_SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:env-topic")
         monkeypatch.setenv("HOOKBELL_AWS_PROFILE", "env-profile")
-        topic_arn_path = tmp_path / "hookbell-sns-topic-arn"
+        topic_arn_path = tmp_path / "hookbell_sns_topic_arn"
         topic_arn_path.write_text(f"{TOPIC_ARN}\n", encoding="utf-8")
-        profile_path = tmp_path / "hookbell-aws-profile"
+        profile_path = tmp_path / "hookbell_aws_profile"
         profile_path.write_text("secret-profile\n", encoding="utf-8")
         monkeypatch.setattr(SnsNotifier, "TOPIC_ARN_SECRET_PATH", topic_arn_path)
         monkeypatch.setattr(SnsNotifier, "AWS_PROFILE_SECRET_PATH", profile_path)
