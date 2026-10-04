@@ -3,10 +3,31 @@
 
 from __future__ import annotations
 
+import logging
+from typing import TYPE_CHECKING
+
 import pytest
 
 from hookbell.notifiers.slack import SlackNotifier
 from hookbell.notifiers.sns import SnsNotifier
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+
+@pytest.fixture(autouse=True)
+def _isolate_cache_home(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Point XDG_CACHE_HOME at a location tests control so hookbell's log file never lands in the real ~/.cache."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path_factory.mktemp("cache")))
+
+
+@pytest.fixture(autouse=True)
+def _restore_hookbell_logger_level() -> Iterator[None]:
+    """Undo the level main()'s --log-level sets on the hookbell logger, which would otherwise leak across tests."""
+    logger = logging.getLogger("hookbell")
+    level = logger.level
+    yield
+    logger.setLevel(level)
 
 
 @pytest.fixture(autouse=True)
