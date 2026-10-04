@@ -91,8 +91,27 @@ Point Claude Code's `Notification`, `PermissionRequest`, and `Stop` hooks at hoo
 
 Hookbell recognizes a Claude Code hook payload by its `transcript_path` field and posts a message
 built from that transcript: the assistant's own last message when there is one, or a description of
-the pending permission request otherwise. A failed notification here is logged (see `slack.log`)
-rather than raised, so a flaky network never turns into hook-failure noise.
+the pending permission request otherwise. A failed notification here is swallowed rather than raised,
+so a flaky network never turns into hook-failure noise; turn on logging (below) to see why it failed.
+
+### How do I see why a notification failed?
+
+Hookbell writes no log by default. Add `--log-level` to the command (or set `HOOKBELL_LOG_LEVEL`) to
+write hookbell's own logs to `$XDG_CACHE_HOME/hookbell/slack.log` (`~/.cache/hookbell/slack.log` when
+`XDG_CACHE_HOME` is unset):
+
+```json
+{ "type": "command", "command": "uvx hookbell --log-level warning" }
+```
+
+The log file lives outside your project, so it never ends up in a commit, and only you can read it.
+At `debug`, the log includes the raw hook payload, which carries your conversation and tool inputs.
+
+Other libraries stay at WARNING whatever `--log-level` you choose, because their DEBUG output can
+contain credentials — the AWS SDK logs request headers and response bodies verbatim. When you really
+need it, `--dangerously-debug-all-loggers` sets every logger to DEBUG. It is accepted only on the
+command line, never from an environment variable, and prints a warning on every run; remove it as
+soon as you finish debugging.
 
 ### How do I use hookbell in a Docker container?
 
