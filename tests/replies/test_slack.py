@@ -11,6 +11,8 @@ from urllib.error import HTTPError
 
 import pytest
 
+from hookbell.replies.base import Reply
+from hookbell.replies.base import ReplyOutcome
 from hookbell.replies.slack import SlackReplyChannel
 from hookbell.replies.slack_credentials import SlackCredentials
 
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
 
 PARENT_TS = "1700000000.000100"
 POSTED = {"ok": True, "ts": PARENT_TS}
+REACTED = {"ok": True}
 PARENT_MESSAGE: dict[str, Any] = {"ts": PARENT_TS, "bot_id": "B0HOOKBELL", "text": "Claude stopped"}
 
 
@@ -63,6 +66,7 @@ class TestSlackReplyChannel:
 
         assert reply is not None
         assert reply.text == "Run the tests too"
+        assert reply.message_id == "1700000000.000200"
         assert fake_slack_web_api.params_of("chat.postMessage") == [
             {"channel": "C0123", "text": "Claude stopped", "blocks": markdown_blocks("Claude stopped")},
         ]
@@ -178,6 +182,53 @@ class TestSlackReplyChannel:
 
         assert reply is not None
         assert reply.text == "use a <b> tag & retry"
+
+    @pytest.mark.parametrize(
+        ("outcome", "emoji_name"),
+        [
+            (ReplyOutcome.CONTINUE, "eyes"),
+            (ReplyOutcome.STOP, "zzz"),
+            (ReplyOutcome.ALLOW, "zap"),
+            (ReplyOutcome.DENY, "recycle"),
+        ],
+    )
+    def test_acknowledge_reacts_to_the_reply_with_the_emoji_for_the_outcome(
+        self,
+        channel: SlackReplyChannel,
+        fake_slack_web_api: FakeSlackWebApi,
+        outcome: ReplyOutcome,
+        emoji_name: str,
+    ) -> None:
+        """React to the reply's own message with the emoji that tells the user what hookbell made of it."""
+        fake_slack_web_api.queue("reactions.add", REACTED)
+
+        channel.acknowledge(Reply("ok", message_id="1700000000.000200"), outcome)
+
+        assert fake_slack_web_api.params_of("reactions.add") == [
+            {"channel": "C0123", "timestamp": "1700000000.000200", "name": emoji_name},
+        ]
+
+    @pytest.mark.parametrize(
+        "reaction_response",
+        [
+            pytest.param({"ok": False, "error": "missing_scope"}, id="api_error"),
+            pytest.param(rate_limited("1"), id="rate_limited"),
+            pytest.param(OSError("Network is unreachable"), id="network_error"),
+        ],
+    )
+    def test_acknowledge_only_logs_a_failure(
+        self,
+        channel: SlackReplyChannel,
+        fake_slack_web_api: FakeSlackWebApi,
+        caplog: pytest.LogCaptureFixture,
+        reaction_response: dict[str, Any] | Exception,
+    ) -> None:
+        """Log a failed reactions.add instead of raising it, since the reaction is only an acknowledgement."""
+        fake_slack_web_api.queue("reactions.add", reaction_response)
+
+        channel.acknowledge(Reply("ok", message_id="1700000000.000200"), ReplyOutcome.ALLOW)
+
+        assert "Failed to react to the reply" in caplog.text
 
     @pytest.mark.usefixtures("slack_bot_settings")
     def test_from_environment_reads_the_credentials(self) -> None:

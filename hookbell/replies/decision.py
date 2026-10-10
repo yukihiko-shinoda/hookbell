@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import ClassVar
 
+from hookbell.replies.base import ReplyOutcome
+
 if TYPE_CHECKING:
     from hookbell.replies.base import Reply
 
@@ -37,6 +39,10 @@ class HookDecision(ABC):
         """Return the instruction appended to the posted message, telling the user how to reply."""
 
     @abstractmethod
+    def outcome(self, reply: Reply) -> ReplyOutcome:
+        """Return what reply means for this hook event."""
+
+    @abstractmethod
     def to_output(self, reply: Reply) -> dict[str, Any] | None:
         """Return the hook output for reply, or None to print nothing."""
 
@@ -52,8 +58,11 @@ class StopDecision(HookDecision):
             "Reply in this thread to give Claude its next instruction, or reply `stop` / `quit` / `q` to let it stop."
         )
 
+    def outcome(self, reply: Reply) -> ReplyOutcome:
+        return ReplyOutcome.STOP if reply.normalized in self.STOP_KEYWORDS else ReplyOutcome.CONTINUE
+
     def to_output(self, reply: Reply) -> dict[str, Any] | None:
-        if reply.normalized in self.STOP_KEYWORDS:
+        if self.outcome(reply) is ReplyOutcome.STOP:
             return None
         return {"decision": "block", "reason": reply.text}
 
@@ -70,8 +79,11 @@ class PermissionDecision(HookDecision):
     def hint(self) -> str:
         return "Reply exactly `ok` / `yes` / `y` to allow. Any other reply denies, and Claude reads it as the reason."
 
+    def outcome(self, reply: Reply) -> ReplyOutcome:
+        return ReplyOutcome.ALLOW if reply.normalized in self.ALLOW_KEYWORDS else ReplyOutcome.DENY
+
     def to_output(self, reply: Reply) -> dict[str, Any] | None:
-        if reply.normalized in self.ALLOW_KEYWORDS:
+        if self.outcome(reply) is ReplyOutcome.ALLOW:
             decision: dict[str, Any] = {"behavior": "allow"}
         else:
             # interrupt: False lets Claude keep working with the denial and reply text, instead of halting the turn.

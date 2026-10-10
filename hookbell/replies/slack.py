@@ -8,12 +8,15 @@ from logging import getLogger
 from time import monotonic
 from time import sleep
 from typing import TYPE_CHECKING
+from typing import ClassVar
 
 from hookbell.replies.base import Reply
 from hookbell.replies.base import ReplyChannel
+from hookbell.replies.base import ReplyOutcome
 from hookbell.replies.base import never
 from hookbell.replies.reply_filter import ReplyFilter
 from hookbell.replies.slack_credentials import SlackCredentials
+from hookbell.replies.slack_web_api import SlackApiError
 from hookbell.replies.slack_web_api import SlackRateLimitedError
 from hookbell.replies.slack_web_api import SlackWebApi
 from hookbell.slack_markdown import SlackMarkdown
@@ -34,6 +37,13 @@ class SlackReplyChannel(ReplyChannel):
     POLL_INTERVAL_SECONDS = 5.0
     TIMEOUT_NOTICE = "Timed out waiting for a reply. Answer in the terminal instead."
     ANSWERED_ELSEWHERE_NOTICE = "Answered in the terminal, so this thread no longer takes a reply."
+    # Slack's emoji names: 👀, 💤, ⚡, ♻️.
+    REACTIONS: ClassVar[dict[ReplyOutcome, str]] = {
+        ReplyOutcome.CONTINUE: "eyes",
+        ReplyOutcome.STOP: "zzz",
+        ReplyOutcome.ALLOW: "zap",
+        ReplyOutcome.DENY: "recycle",
+    }
 
     def __init__(self, credentials: SlackCredentials, web_api: SlackWebApi | None = None) -> None:
         self.credentials = credentials
@@ -110,8 +120,23 @@ class SlackReplyChannel(ReplyChannel):
         for message in messages:
             if reply_filter.matches(message):
                 self.logger.debug("reply: %s", message.get("text"))
-                return Reply(self._unescape(str(message.get("text", ""))))
+                return Reply(self._unescape(str(message.get("text", ""))), message_id=str(message.get("ts", "")))
         return None
+
+    def acknowledge(self, reply: Reply, outcome: ReplyOutcome) -> None:
+        """React to reply with the emoji for outcome, so the user sees in Slack what hookbell made of it.
+
+        A failure, such as a bot token without the reactions:write scope, is only logged.
+        """
+        try:
+            self.web_api.call(
+                "reactions.add",
+                channel=self.credentials.channel_id,
+                timestamp=reply.message_id,
+                name=self.REACTIONS[outcome],
+            )
+        except (SlackApiError, SlackRateLimitedError, OSError):
+            self.logger.warning("Failed to react to the reply", exc_info=True)
 
     @staticmethod
     def _unescape(text: str) -> str:
