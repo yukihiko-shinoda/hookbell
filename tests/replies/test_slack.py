@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from email.message import Message
 from typing import TYPE_CHECKING
 from typing import Any
@@ -28,6 +29,10 @@ def replies(*messages: dict[str, Any]) -> dict[str, Any]:
 
 def human_reply(text: str, ts: str = "1700000000.000200", user: str = "U0ALLOWED") -> dict[str, Any]:
     return {"ts": ts, "user": user, "text": text}
+
+
+def markdown_blocks(text: str) -> str:
+    return json.dumps([{"type": "markdown", "text": text}])
 
 
 def rate_limited(retry_after: str) -> HTTPError:
@@ -58,7 +63,9 @@ class TestSlackReplyChannel:
 
         assert reply is not None
         assert reply.text == "Run the tests too"
-        assert fake_slack_web_api.params_of("chat.postMessage") == [{"channel": "C0123", "text": "Claude stopped"}]
+        assert fake_slack_web_api.params_of("chat.postMessage") == [
+            {"channel": "C0123", "text": "Claude stopped", "blocks": markdown_blocks("Claude stopped")},
+        ]
         assert fake_slack_web_api.params_of("conversations.replies") == [{"channel": "C0123", "ts": PARENT_TS}]
 
     @pytest.mark.usefixtures("fake_clock")
@@ -115,6 +122,7 @@ class TestSlackReplyChannel:
         assert fake_slack_web_api.params_of("chat.postMessage")[-1] == {
             "channel": "C0123",
             "text": SlackReplyChannel.TIMEOUT_NOTICE,
+            "blocks": markdown_blocks(SlackReplyChannel.TIMEOUT_NOTICE),
             "thread_ts": PARENT_TS,
         }
 
@@ -137,6 +145,7 @@ class TestSlackReplyChannel:
         assert fake_slack_web_api.params_of("chat.postMessage")[-1] == {
             "channel": "C0123",
             "text": SlackReplyChannel.ANSWERED_ELSEWHERE_NOTICE,
+            "blocks": markdown_blocks(SlackReplyChannel.ANSWERED_ELSEWHERE_NOTICE),
             "thread_ts": PARENT_TS,
         }
 

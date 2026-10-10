@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from hookbell.notify_style import PlainTextNotification
+from hookbell.slack_markdown import SlackMarkdown
 
 
 class TestPlainTextNotificationText:
@@ -22,3 +23,8 @@ class TestPlainTextNotificationText:
 
         truncated = captured[-PlainTextNotification.STDIN_CHARACTER_LIMIT :]
         assert text == f"Finished!\n```\n{truncated}\n```"
+
+    def test_fits_the_truncated_text_into_a_slack_markdown_block(self) -> None:
+        captured = "x" * (SlackMarkdown.CHARACTER_LIMIT * 2)
+
+        assert len(PlainTextNotification(captured).text) == SlackMarkdown.CHARACTER_LIMIT

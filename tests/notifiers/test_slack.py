@@ -59,18 +59,21 @@ class TestSlackNotifierIsConfigured:
 class TestSlackNotifierNotify:
     """Tests for SlackNotifier.notify."""
 
-    def test_posts_text_as_a_single_slack_section_block(self, mocker: MockerFixture) -> None:
-        """Post the given text as a single Slack Block Kit section."""
+    def test_posts_text_as_a_single_slack_markdown_block(self, mocker: MockerFixture) -> None:
+        """Post the given text as a single Slack Block Kit markdown block, with the text as the fallback."""
         notifier = SlackNotifier(webhook_url="https://hooks.slack.com/services/T000/B000/XXX")
         urlopen = mocker.patch("hookbell.notifiers.slack.request.urlopen")
         urlopen.return_value.__enter__.return_value.read.return_value = b"ok"
 
-        notifier.notify("Hello world")
+        notifier.notify("## Hello world")
 
         posted_request = urlopen.call_args.args[0]
         assert posted_request.full_url == "https://hooks.slack.com/services/T000/B000/XXX"
         posted_data = json.loads(posted_request.data.decode("utf-8"))
-        assert posted_data == {"blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": "Hello world"}}]}
+        assert posted_data == {
+            "text": "## Hello world",
+            "blocks": [{"type": "markdown", "text": "## Hello world"}],
+        }
 
     def test_rejects_a_non_https_webhook_url(self) -> None:
         notifier = SlackNotifier(webhook_url="file:///etc/passwd")

@@ -116,6 +116,53 @@ uv run pytest tests.test_hookbell
 
 ```
 
+### Try local changes as a Claude Code hook
+
+`uvx hookbell` runs the release published on PyPI, so it never picks up your uncommitted changes.
+To try your working tree in a real Claude Code session, point the hooks in your Claude Code `settings.json` at
+your clone with `uv run --directory` instead (replace `/path/to/hookbell` with your clone's absolute path):
+
+```json
+{
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory /path/to/hookbell hookbell --log-level DEBUG"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory /path/to/hookbell hookbell --wait-reply --log-level DEBUG"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory /path/to/hookbell hookbell --wait-reply --log-level DEBUG"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`uv run` executes the clone's own virtual environment, so each edit takes effect from the next hook run. Hook
+failures never surface in Claude Code, so `--log-level DEBUG` writes what happened to
+`~/.cache/hookbell/slack.log`. Switch the commands back to `uvx hookbell` once you finish testing.
+
 ## Deploying
 
 A reminder for the maintainers on how to deploy.
