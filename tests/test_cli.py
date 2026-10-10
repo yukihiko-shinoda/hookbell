@@ -145,6 +145,10 @@ def hook_payload(transcript_path: Path, hook_event_name: str) -> str:
     return json.dumps({"hook_event_name": hook_event_name, "transcript_path": str(transcript_path)})
 
 
+def reaction_names(fake_slack_web_api: FakeSlackWebApi) -> list[str]:
+    return [params["name"] for params in fake_slack_web_api.params_of("reactions.add")]
+
+
 def queue_reply(fake_slack_web_api: FakeSlackWebApi, text: str) -> None:
     fake_slack_web_api.queue("chat.postMessage", {"ok": True, "ts": PARENT_TS})
     fake_slack_web_api.queue(
@@ -170,6 +174,7 @@ class TestMainWaitReply:
 
         assert result.exit_code == 0
         assert json.loads(result.output) == {"decision": "block", "reason": "Run the tests too"}
+        assert reaction_names(fake_slack_web_api) == ["eyes"]
         posted_text = fake_slack_web_api.params_of("chat.postMessage")[0]["text"]
         assert "Hello from assistant" in posted_text
         assert "`stop`" in posted_text
@@ -192,6 +197,7 @@ class TestMainWaitReply:
 
         assert result.exit_code == 0
         assert result.output == ""
+        assert reaction_names(fake_slack_web_api) == ["zzz"]
 
     def test_permission_request_allows_on_an_allow_keyword(
         self,
@@ -209,6 +215,7 @@ class TestMainWaitReply:
 
         assert result.exit_code == 0
         assert json.loads(result.output)["hookSpecificOutput"]["decision"] == {"behavior": "allow"}
+        assert reaction_names(fake_slack_web_api) == ["zap"]
 
     def test_permission_request_denies_a_near_miss_of_an_allow_keyword(
         self,
@@ -226,6 +233,7 @@ class TestMainWaitReply:
 
         assert result.exit_code == 0
         assert json.loads(result.output)["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+        assert reaction_names(fake_slack_web_api) == ["recycle"]
 
     def test_prints_nothing_on_timeout(self, transcript_path: Path, fake_slack_web_api: FakeSlackWebApi) -> None:
         """Print nothing once the reply timeout passes, leaving the decision to the terminal."""

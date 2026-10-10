@@ -27,8 +27,8 @@ On the app's settings pages, do the following all steps:
    - `chat:write`
    - `channels:history` (`groups:history` for a private channel)
    - `reactions:write`
-     - Optional. It lets hookbell react with 👍 to your reply once it receives it. Without it, your reply
-       still works, just without the reaction
+     - Optional. It lets hookbell react to your reply with an emoji showing how it read the reply. Without
+       it, your reply still works, just without the reaction
 2. Click **Reinstall to Workspace** at the top of the page
    - New scopes take effect only after reinstalling
    - Your existing webhook URL normally keeps working
@@ -124,22 +124,24 @@ following all checks:
    tools", and check that a message arrives in Slack once it answers
    - A request that needs a permission starts a `PermissionRequest` wait first, mixing it up with the
      `Stop` one
-2. Reply with an instruction in the thread, and check that a 👍 reaction appears on your reply and
+2. Reply with an instruction in the thread, and check that a 👀 reaction appears on your reply and
    Claude keeps working on it
    - Claude Code shows your reply under a `Stop hook error:` label. Nothing has failed
-3. When Claude stops again, reply a stop keyword (`stop`, `quit`, or `q`), and check that Claude stops
+3. When Claude stops again, reply a stop keyword (`stop`, `quit`, or `q`), and check that a 💤 reaction
+   appears on your reply and Claude stops
 4. While `running Stop hooks…` is shown, send a message at the terminal, and check that Claude handles it
    within about 5 seconds
 5. Ask for something that always asks for permission, such as "Create `hookbell-test.txt` containing
    `test`" (a Write), and check the following all cases:
-   - Replying with an allow keyword allows it. The allow keywords are the following all words, matched
-     exactly apart from the few differences the README lists:
+   - Replying with an allow keyword allows it, with a ⚡ reaction on your reply. The allow keywords are
+     the following all words, matched exactly apart from the few differences the README lists:
      - `ok`
      - `yes`
      - `y`
-   - Replying with anything else denies it, and Claude reads your reply as the reason. There is no list
-     of deny words: a reason such as `Write it under tmp/ instead` denies, and so does a near miss such
-     as `ok!` or `yes.`, so a speech-to-text slip never allows by accident
+   - Replying with anything else denies it, with a ♻️ reaction on your reply, and Claude reads your reply
+     as the reason. There is no list of deny words: a reason such as `Write it under tmp/ instead`
+     denies, and so does a near miss such as `ok!` or `yes.`, so a speech-to-text slip never allows by
+     accident
    - Answering the dialog at the terminal first wins
 6. Delete the test file, and set the timeouts back
 

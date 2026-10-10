@@ -153,7 +153,10 @@ def _ask_claude_code_hook(claude_code_stdin: ClaudeCodeStdin, decision: HookDeci
         text = f"{ClaudeCodeHookEvent(claude_code_stdin).text}\n\n{decision.hint}"
         channel = SlackReplyChannel.from_environment()
         reply = channel.ask(text, reply_timeout, queued_message_watcher.has_queued_message)
-        output = None if reply is None else decision.to_output(reply)
+        if reply is None:
+            return
+        channel.acknowledge(reply, decision.outcome(reply))
+        output = decision.to_output(reply)
     except Exception:  # pylint: disable=broad-exception-caught
         getLogger(__name__).exception("Failed to wait for a reply to Claude Code hook event")
         return

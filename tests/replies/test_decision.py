@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from hookbell.replies.base import Reply
+from hookbell.replies.base import ReplyOutcome
 from hookbell.replies.decision import HookDecision
 from hookbell.replies.decision import PermissionDecision
 from hookbell.replies.decision import StopDecision
@@ -43,6 +44,13 @@ class TestStopDecision:
         """Keep Claude working on a reply that only nearly matches a stop keyword, passing it on as the instruction."""
         assert StopDecision().to_output(Reply(text)) == {"decision": "block", "reason": text}
 
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [("Run the tests too", ReplyOutcome.CONTINUE), ("stop.", ReplyOutcome.CONTINUE), (" Q\n", ReplyOutcome.STOP)],
+    )
+    def test_outcome_is_stop_only_for_a_stop_keyword(self, text: str, expected: ReplyOutcome) -> None:
+        assert StopDecision().outcome(Reply(text)) is expected
+
     def test_hint_names_the_stop_keywords(self) -> None:
         assert all(f"`{keyword}`" in StopDecision().hint for keyword in StopDecision.STOP_KEYWORDS)
 
@@ -69,6 +77,13 @@ class TestPermissionDecision:
                 "decision": {"behavior": "deny", "message": text, "interrupt": False},
             },
         }
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [(FULL_WIDTH_OK, ReplyOutcome.ALLOW), (" y\n", ReplyOutcome.ALLOW), ("ok!", ReplyOutcome.DENY)],
+    )
+    def test_outcome_is_allow_only_for_an_allow_keyword(self, text: str, expected: ReplyOutcome) -> None:
+        assert PermissionDecision().outcome(Reply(text)) is expected
 
     def test_hint_names_the_allow_keywords(self) -> None:
         assert all(keyword in PermissionDecision().hint for keyword in PermissionDecision.ALLOW_KEYWORDS)

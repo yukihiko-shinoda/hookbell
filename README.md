@@ -114,8 +114,15 @@ allows. Matching ignores only the following all differences:
 - Surrounding spaces
 - Full-width letters (`ＯＫ` matches `ok`)
 
-Hookbell reacts with 👍 to the reply it accepts, before Claude Code acts on it, so you can tell in
-Slack that the reply was received.
+Before Claude Code acts on your reply, hookbell reacts to it with the emoji for what the reply did, so you
+can tell in Slack that it was received and how it was read:
+
+| Reaction | Meaning |
+| --- | --- |
+| 👀 | Claude keeps working on your `Stop` reply |
+| 💤 | Claude stops on your stop keyword |
+| ⚡ | The tool call is allowed |
+| ♻️ | The tool call is denied |
 
 Whenever anything goes wrong,
 hookbell prints nothing and the decision stays with you at the terminal.
@@ -153,7 +160,7 @@ This needs a Slack app of your own, installed to your workspace and invited to t
 
 | Setting | Docker secret | Environment variable |
 | --- | --- | --- |
-| Bot token (`xoxb-`) with `chat:write` and `channels:history` (`groups:history` for a private channel), plus the optional `reactions:write` for the 👍 reaction | `/run/secrets/slack_bot_token` | `SLACK_BOT_TOKEN` |
+| Bot token (`xoxb-`) with `chat:write` and `channels:history` (`groups:history` for a private channel), plus the optional `reactions:write` for the reactions | `/run/secrets/slack_bot_token` | `SLACK_BOT_TOKEN` |
 | Channel ID to post in | `/run/secrets/hookbell_slack_channel_id` | `HOOKBELL_SLACK_CHANNEL_ID` |
 | Your Slack member ID; replies from anyone else are ignored | `/run/secrets/hookbell_slack_allowed_user_id` | `HOOKBELL_SLACK_ALLOWED_USER_ID` |
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import unicodedata
 from abc import ABC
 from abc import abstractmethod
+from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,10 +14,14 @@ if TYPE_CHECKING:
 
 
 class Reply:
-    """A human's reply received through a ReplyChannel."""
+    """A human's reply received through a ReplyChannel.
 
-    def __init__(self, text: str) -> None:
+    message_id is the backend's own identifier of the reply message (e.g. Slack's ts), for ReplyChannel.acknowledge().
+    """
+
+    def __init__(self, text: str, message_id: str = "") -> None:
         self.text = text
+        self.message_id = message_id
 
     @property
     def normalized(self) -> str:
@@ -26,6 +31,15 @@ class Reply:
         punctuation is kept as is, so "ok!" never matches "ok".
         """
         return unicodedata.normalize("NFKC", self.text).strip().casefold()
+
+
+class ReplyOutcome(Enum):
+    """What hookbell made of a reply, which ReplyChannel.acknowledge() shows back to the user."""
+
+    CONTINUE = "continue"
+    STOP = "stop"
+    ALLOW = "allow"
+    DENY = "deny"
 
 
 def never() -> bool:
@@ -42,4 +56,11 @@ class ReplyChannel(ABC):
 
         Return None instead when timeout seconds pass without one, or once answered_elsewhere() returns True, which
         means the user went on at the terminal and a reply could no longer be honored.
+        """
+
+    @abstractmethod
+    def acknowledge(self, reply: Reply, outcome: ReplyOutcome) -> None:
+        """Mark reply as received, showing outcome to the user.
+
+        This is best-effort: a failure is only logged, never raised, so it never costs the reply itself.
         """

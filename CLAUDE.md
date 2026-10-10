@@ -95,9 +95,11 @@ to the user at the terminal — never `allow`. That covers the following all cas
 - `base.py`: `ReplyChannel` ABC (`ask(text, timeout) -> Reply | None`), kept separate from `Notifier` so SNS isn't
   affected. `Reply.normalized` applies NFKC + `strip()` + `casefold()` but keeps punctuation, so `ok!` never matches.
 - `slack.py` (`SlackReplyChannel`): posts with `chat.postMessage`, then polls `conversations.replies` every 5 s until
-  `--reply-timeout`, honoring `Retry-After` on HTTP 429, and posts a timeout notice in the thread. It reacts with 👍
-  (`reactions.add`) to the accepted reply as a best-effort acknowledgement: a failure (e.g. a token without the
-  optional `reactions:write` scope) is only logged, never costing the reply. It deliberately
+  `--reply-timeout`, honoring `Retry-After` on HTTP 429, and posts a timeout notice in the thread. Its
+  `acknowledge()` reacts (`reactions.add`) to the accepted reply with the emoji for the `ReplyOutcome` that
+  `HookDecision.outcome()` judged (👀 continue, 💤 stop, ⚡ allow, ♻️ deny), before hookbell prints the decision. It is
+  best-effort: a failure (e.g. a token without the optional `reactions:write` scope) is only logged, never costing
+  the reply. It deliberately
   doesn't use Socket Mode: Socket Mode delivers each event to only one of the app's connections, so sessions waiting
   in parallel would steal each other's replies.
 - Terminal input ends the wait early: Claude Code queues a message the user sends while a hook runs and appends a
