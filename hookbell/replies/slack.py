@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from logging import getLogger
 from time import monotonic
 from time import sleep
@@ -15,6 +16,7 @@ from hookbell.replies.reply_filter import ReplyFilter
 from hookbell.replies.slack_credentials import SlackCredentials
 from hookbell.replies.slack_web_api import SlackRateLimitedError
 from hookbell.replies.slack_web_api import SlackWebApi
+from hookbell.slack_markdown import SlackMarkdown
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -62,7 +64,13 @@ class SlackReplyChannel(ReplyChannel):
         return None
 
     def _post(self, text: str, **params: str) -> str:
-        response = self.web_api.call("chat.postMessage", channel=self.credentials.channel_id, text=text, **params)
+        response = self.web_api.call(
+            "chat.postMessage",
+            channel=self.credentials.channel_id,
+            text=text,
+            blocks=json.dumps(SlackMarkdown(text).blocks),
+            **params,
+        )
         return str(response["ts"])
 
     def _wait(self, reply_filter: ReplyFilter, timeout: float, answered_elsewhere: Callable[[], bool]) -> Reply | str:

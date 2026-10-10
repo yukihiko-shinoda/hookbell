@@ -127,17 +127,27 @@ Tests mock only `urlopen` (`FakeSlackWebApi` in `tests/conftest.py`) and the mod
 - `transcript.py` (`Transcript` / `FileLastLineGetter`): reads only the *last line* of the (potentially large,
   append-only JSONL) transcript file, seeking backward from EOF rather than reading the whole file.
   `_remove_unreadable_keys` strips internal bookkeeping fields (`parentUuid`, `uuid`, `sessionId`, etc.) before
-  the entry is echoed into the Slack message as pretty-printed JSON. Every accessor tolerates missing keys, since
+  the entry is written to the debug log as pretty-printed JSON. Every accessor tolerates missing keys, since
   the last line can be a plain assistant message, a tool call, a sub-agent/sidechain entry, or a compaction
   summary — each with a different shape.
 - `event.py` (`ClaudeCodeHookEvent`): combines a `ClaudeCodeStdin` and its referenced `Transcript` into the final
   notification text — `transcript.text_content` when present, else `stdin.fallback_text`, followed by the message
-  type and the sanitized transcript entry.
+  type. The sanitized transcript entry goes to the debug log, never the message: it once made Slack split a
+  `--wait-reply` post into several messages, and a reply in a part other than the one whose `ts` hookbell polls is
+  never seen.
 
 ### Plain-text composition (`hookbell/notify_style.py`)
 
 `PlainTextNotification` produces `"Finished!"` on its own for empty stdin, or `"Finished!"` plus the captured
-stdin in a code block otherwise, truncated to `STDIN_CHARACTER_LIMIT` (Slack's message character limit).
+stdin in a code block otherwise, keeping only the tail that fits `STDIN_CHARACTER_LIMIT` (sized so the whole text fits
+one Slack markdown block).
+
+### Slack Markdown (`hookbell/slack_markdown.py`)
+
+Both Slack paths (`SlackNotifier` and `SlackReplyChannel`) post the text as a Block Kit `markdown` block, not a
+`mrkdwn` section, so Claude Code's standard Markdown (headings, tables, fenced code) renders as structured text;
+the raw text also goes in the top-level `text` as the notification fallback. `SlackMarkdown` cuts text to Slack's
+12,000-character cumulative limit for markdown blocks, closing a fenced code block the cut leaves open.
 
 ### Notification backend (`hookbell/notifiers/`)
 

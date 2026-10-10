@@ -14,6 +14,7 @@ from urllib import request
 import certifi
 
 from hookbell.notifiers.base import Notifier
+from hookbell.slack_markdown import SlackMarkdown
 
 
 class SlackNotifier(Notifier):
@@ -40,11 +41,11 @@ class SlackNotifier(Notifier):
         return cls(webhook_url=os.environ[cls.WEBHOOK_URL_ENVIRONMENT_VARIABLE])
 
     def notify(self, text: str) -> None:
-        """Post text to Slack as a single section block."""
+        """Post Markdown text to Slack as a markdown block, with the text itself as the notification fallback."""
         if not self.webhook_url.startswith("https://"):
             message = f"Slack webhook URL must use https://, got: {self.webhook_url!r}"
             raise ValueError(message)
-        data = {"blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": text}}]}
+        data = {"text": text, "blocks": SlackMarkdown(text).blocks}
         # Reason: self.webhook_url is only ever populated by from_environment() above, from an
         # operator-configured Docker secret file or the SLACK_WEBHOOK_URL environment variable --
         # never from untrusted external input -- and the https:// scheme check right above rules

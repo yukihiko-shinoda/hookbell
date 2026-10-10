@@ -25,8 +25,7 @@ class TestClaudeCodeHookEventText:
 
         text = ClaudeCodeHookEvent(stdin).text
 
-        assert text.startswith("Hello from assistant\n\nMessage type: Stop\n\n```")
-        assert '"text": "Hello from assistant"' in text
+        assert text == "Hello from assistant\n\nMessage type: Stop"
 
     def test_falls_back_to_the_stdin_fallback_text(self, tmp_path: Path) -> None:
         """Fall back to the stdin's own fallback text when the transcript has no assistant text."""
@@ -44,4 +43,4 @@ class TestClaudeCodeHookEventText:
 
         text = ClaudeCodeHookEvent(stdin).text
 
-        assert text.startswith('Waiting for permission: Bash({"command": "ls"})\n\nMessage type: PermissionRequest')
+        assert text == 'Waiting for permission: Bash({"command": "ls"})\n\nMessage type: PermissionRequest'

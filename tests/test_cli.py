@@ -63,14 +63,14 @@ class TestMainPlainTextMode:
 
         assert result.exit_code == 0
         posted = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
-        assert posted["blocks"][0]["text"]["text"] == "Finished!"
+        assert posted["blocks"][0]["text"] == "Finished!"
 
     def test_notifies_the_piped_plain_text(self, urlopen: MagicMock) -> None:
         result = CliRunner().invoke(cli.main, input="Hello world\n")
 
         assert result.exit_code == 0
         posted = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
-        assert "Hello world" in posted["blocks"][0]["text"]["text"]
+        assert "Hello world" in posted["blocks"][0]["text"]
 
     def test_reports_notification_failures_as_a_clean_error_and_exits_1(self, mocker: MockerFixture) -> None:
         mocker.patch("hookbell.notifiers.slack.request.urlopen", side_effect=OSError("boom"))
@@ -107,7 +107,7 @@ class TestMainClaudeCodeHookMode:
 
         assert result.exit_code == 0
         posted = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
-        assert "Hello from assistant" in posted["blocks"][0]["text"]["text"]
+        assert "Hello from assistant" in posted["blocks"][0]["text"]
 
     def test_swallows_notification_failures_and_still_exits_0(self, tmp_path: Path) -> None:
         payload = json.dumps({"hook_event_name": "Stop", "transcript_path": str(tmp_path / "missing.jsonl")})
