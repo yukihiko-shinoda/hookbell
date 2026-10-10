@@ -151,6 +151,7 @@ def queue_reply(fake_slack_web_api: FakeSlackWebApi, text: str) -> None:
         "conversations.replies",
         {"ok": True, "messages": [{"ts": "1700000000.000200", "user": "U0ALLOWED", "text": text}]},
     )
+    fake_slack_web_api.queue("reactions.add", {"ok": True})
 
 
 @pytest.mark.usefixtures("slack_bot_settings", "fake_clock")
@@ -173,7 +174,11 @@ class TestMainWaitReply:
         assert "Hello from assistant" in posted_text
         assert "`stop`" in posted_text
         # The fake answers every urlopen() call, so a webhook POST would show up here too.
-        assert [method for method, _ in fake_slack_web_api.calls] == ["chat.postMessage", "conversations.replies"]
+        assert [method for method, _ in fake_slack_web_api.calls] == [
+            "chat.postMessage",
+            "conversations.replies",
+            "reactions.add",
+        ]
 
     def test_stop_prints_nothing_for_a_stop_keyword(
         self,

@@ -23,9 +23,12 @@ You can add a bot token to the Slack app behind your webhook when it meets the f
 
 On the app's settings pages, do the following all steps:
 
-1. Under **OAuth & Permissions** → **Bot Token Scopes**, add the following both scopes:
+1. Under **OAuth & Permissions** → **Bot Token Scopes**, add the following all scopes:
    - `chat:write`
    - `channels:history` (`groups:history` for a private channel)
+   - `reactions:write`
+     - Optional. It lets hookbell react with 👍 to your reply once it receives it. Without it, your reply
+       still works, just without the reaction
 2. Click **Reinstall to Workspace** at the top of the page
    - New scopes take effect only after reinstalling
    - Your existing webhook URL normally keeps working
@@ -121,7 +124,8 @@ following all checks:
    tools", and check that a message arrives in Slack once it answers
    - A request that needs a permission starts a `PermissionRequest` wait first, mixing it up with the
      `Stop` one
-2. Reply with an instruction in the thread, and check that Claude keeps working on it
+2. Reply with an instruction in the thread, and check that a 👍 reaction appears on your reply and
+   Claude keeps working on it
    - Claude Code shows your reply under a `Stop hook error:` label. Nothing has failed
 3. When Claude stops again, reply a stop keyword (`stop`, `quit`, or `q`), and check that Claude stops
 4. While `running Stop hooks…` is shown, send a message at the terminal, and check that Claude handles it

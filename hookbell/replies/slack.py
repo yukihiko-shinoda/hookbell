@@ -14,6 +14,7 @@ from hookbell.replies.base import ReplyChannel
 from hookbell.replies.base import never
 from hookbell.replies.reply_filter import ReplyFilter
 from hookbell.replies.slack_credentials import SlackCredentials
+from hookbell.replies.slack_web_api import SlackApiError
 from hookbell.replies.slack_web_api import SlackRateLimitedError
 from hookbell.replies.slack_web_api import SlackWebApi
 from hookbell.slack_markdown import SlackMarkdown
@@ -34,6 +35,8 @@ class SlackReplyChannel(ReplyChannel):
     POLL_INTERVAL_SECONDS = 5.0
     TIMEOUT_NOTICE = "Timed out waiting for a reply. Answer in the terminal instead."
     ANSWERED_ELSEWHERE_NOTICE = "Answered in the terminal, so this thread no longer takes a reply."
+    # Slack's name for the 👍 emoji.
+    ACKNOWLEDGEMENT_REACTION = "+1"
 
     def __init__(self, credentials: SlackCredentials, web_api: SlackWebApi | None = None) -> None:
         self.credentials = credentials
@@ -110,8 +113,25 @@ class SlackReplyChannel(ReplyChannel):
         for message in messages:
             if reply_filter.matches(message):
                 self.logger.debug("reply: %s", message.get("text"))
+                self._acknowledge(str(message.get("ts", "")))
                 return Reply(self._unescape(str(message.get("text", ""))))
         return None
+
+    def _acknowledge(self, message_ts: str) -> None:
+        """React to the accepted reply so the user sees in Slack that hookbell received it.
+
+        The reaction is best-effort: a failure, such as a bot token without the reactions:write scope, is only logged, so
+        it never costs the reply itself.
+        """
+        try:
+            self.web_api.call(
+                "reactions.add",
+                channel=self.credentials.channel_id,
+                timestamp=message_ts,
+                name=self.ACKNOWLEDGEMENT_REACTION,
+            )
+        except (SlackApiError, SlackRateLimitedError, OSError):
+            self.logger.warning("Failed to react to the reply", exc_info=True)
 
     @staticmethod
     def _unescape(text: str) -> str:

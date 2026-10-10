@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 PARENT_TS = "1700000000.000100"
 POSTED = {"ok": True, "ts": PARENT_TS}
+REACTED = {"ok": True}
 PARENT_MESSAGE: dict[str, Any] = {"ts": PARENT_TS, "bot_id": "B0HOOKBELL", "text": "Claude stopped"}
 
 
@@ -58,6 +59,7 @@ class TestSlackReplyChannel:
         """Post the text to the channel, then return the allowed user's reply from its thread."""
         fake_slack_web_api.queue("chat.postMessage", POSTED)
         fake_slack_web_api.queue("conversations.replies", replies(human_reply("Run the tests too")))
+        fake_slack_web_api.queue("reactions.add", REACTED)
 
         reply = channel.ask("Claude stopped", timeout=60)
 
@@ -67,6 +69,54 @@ class TestSlackReplyChannel:
             {"channel": "C0123", "text": "Claude stopped", "blocks": markdown_blocks("Claude stopped")},
         ]
         assert fake_slack_web_api.params_of("conversations.replies") == [{"channel": "C0123", "ts": PARENT_TS}]
+
+    @pytest.mark.usefixtures("fake_clock")
+    def test_ask_reacts_to_the_accepted_reply(
+        self,
+        channel: SlackReplyChannel,
+        fake_slack_web_api: FakeSlackWebApi,
+    ) -> None:
+        """Add a 👍 reaction to the accepted reply, and to no other message."""
+        fake_slack_web_api.queue("chat.postMessage", POSTED)
+        fake_slack_web_api.queue(
+            "conversations.replies",
+            replies(
+                human_reply("from someone else", ts="1700000000.000150", user="U0OTHER"),
+                human_reply("ok"),
+            ),
+        )
+        fake_slack_web_api.queue("reactions.add", REACTED)
+
+        channel.ask("Claude stopped", timeout=60)
+
+        assert fake_slack_web_api.params_of("reactions.add") == [
+            {"channel": "C0123", "timestamp": "1700000000.000200", "name": "+1"},
+        ]
+
+    @pytest.mark.usefixtures("fake_clock")
+    @pytest.mark.parametrize(
+        "reaction_response",
+        [
+            pytest.param({"ok": False, "error": "missing_scope"}, id="api_error"),
+            pytest.param(rate_limited("1"), id="rate_limited"),
+            pytest.param(OSError("Network is unreachable"), id="network_error"),
+        ],
+    )
+    def test_ask_returns_the_reply_even_when_the_reaction_fails(
+        self,
+        channel: SlackReplyChannel,
+        fake_slack_web_api: FakeSlackWebApi,
+        reaction_response: dict[str, Any] | Exception,
+    ) -> None:
+        """Keep the reply when reactions.add fails, since the reaction is only an acknowledgement."""
+        fake_slack_web_api.queue("chat.postMessage", POSTED)
+        fake_slack_web_api.queue("conversations.replies", replies(human_reply("ok")))
+        fake_slack_web_api.queue("reactions.add", reaction_response)
+
+        reply = channel.ask("Claude stopped", timeout=60)
+
+        assert reply is not None
+        assert reply.text == "ok"
 
     @pytest.mark.usefixtures("fake_clock")
     def test_ask_skips_replies_the_filter_rejects(
@@ -83,6 +133,7 @@ class TestSlackReplyChannel:
                 human_reply("ok"),
             ),
         )
+        fake_slack_web_api.queue("reactions.add", REACTED)
 
         reply = channel.ask("Claude stopped", timeout=60)
 
@@ -98,6 +149,7 @@ class TestSlackReplyChannel:
         """Sleep one poll interval before every conversations.replies call until a reply arrives."""
         fake_slack_web_api.queue("chat.postMessage", POSTED)
         fake_slack_web_api.queue("conversations.replies", replies(), replies(), replies(human_reply("ok")))
+        fake_slack_web_api.queue("reactions.add", REACTED)
 
         reply = channel.ask("Claude stopped", timeout=60)
 
@@ -117,6 +169,7 @@ class TestSlackReplyChannel:
         reply = channel.ask("Claude stopped", timeout=12)
 
         assert reply is None
+        assert fake_slack_web_api.params_of("reactions.add") == []
         assert fake_clock.now == 12  # noqa: PLR2004
         assert fake_clock.sleeps == [5.0, 5.0, 2.0]
         assert fake_slack_web_api.params_of("chat.postMessage")[-1] == {
@@ -158,6 +211,7 @@ class TestSlackReplyChannel:
         """Wait for Slack's Retry-After before the next poll after an HTTP 429."""
         fake_slack_web_api.queue("chat.postMessage", POSTED)
         fake_slack_web_api.queue("conversations.replies", rate_limited("20"), replies(human_reply("ok")))
+        fake_slack_web_api.queue("reactions.add", REACTED)
 
         reply = channel.ask("Claude stopped", timeout=60)
 
@@ -173,6 +227,7 @@ class TestSlackReplyChannel:
         """Undo Slack's &lt; &gt; &amp; escapes in the reply text."""
         fake_slack_web_api.queue("chat.postMessage", POSTED)
         fake_slack_web_api.queue("conversations.replies", replies(human_reply("use a &lt;b&gt; tag &amp; retry")))
+        fake_slack_web_api.queue("reactions.add", REACTED)
 
         reply = channel.ask("Claude stopped", timeout=60)
 
