@@ -28,10 +28,16 @@ if TYPE_CHECKING:
 
     from pytest_mock import MockerFixture
 
+    from tests.conftest import FakeClock
+    from tests.conftest import FakeSlackWebApi
+
+PARENT_TS = "1700000000.000100"
+WEBHOOK_URL = "https://hooks.slack.com/services/T000/B000/XXX"
+
 
 @pytest.fixture(autouse=True)
 def _slack_webhook_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/T000/B000/XXX")
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", WEBHOOK_URL)
 
 
 @pytest.fixture(name="urlopen")
@@ -125,6 +131,205 @@ class TestMainClaudeCodeHookMode:
         result = CliRunner().invoke(cli.main, input=payload)
 
         assert result.exit_code == 0
+
+
+@pytest.fixture(name="transcript_path")
+def _transcript_path_fixture(tmp_path: Path) -> Path:
+    entry = {"message": {"content": [{"type": "text", "text": "Hello from assistant"}]}}
+    path = tmp_path / "transcript.jsonl"
+    path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+    return path
+
+
+def hook_payload(transcript_path: Path, hook_event_name: str) -> str:
+    return json.dumps({"hook_event_name": hook_event_name, "transcript_path": str(transcript_path)})
+
+
+def queue_reply(fake_slack_web_api: FakeSlackWebApi, text: str) -> None:
+    fake_slack_web_api.queue("chat.postMessage", {"ok": True, "ts": PARENT_TS})
+    fake_slack_web_api.queue(
+        "conversations.replies",
+        {"ok": True, "messages": [{"ts": "1700000000.000200", "user": "U0ALLOWED", "text": text}]},
+    )
+
+
+@pytest.mark.usefixtures("slack_bot_settings", "fake_clock")
+class TestMainWaitReply:
+    """Tests for main() with --wait-reply."""
+
+    def test_stop_continues_claude_with_the_reply(
+        self,
+        transcript_path: Path,
+        fake_slack_web_api: FakeSlackWebApi,
+    ) -> None:
+        """Print a block decision carrying the reply, posting only through the bot and never the webhook."""
+        queue_reply(fake_slack_web_api, "Run the tests too")
+
+        result = CliRunner().invoke(cli.main, ["--wait-reply"], input=hook_payload(transcript_path, "Stop"))
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == {"decision": "block", "reason": "Run the tests too"}
+        posted_text = fake_slack_web_api.params_of("chat.postMessage")[0]["text"]
+        assert "Hello from assistant" in posted_text
+        assert "`stop`" in posted_text
+        # The fake answers every urlopen() call, so a webhook POST would show up here too.
+        assert [method for method, _ in fake_slack_web_api.calls] == ["chat.postMessage", "conversations.replies"]
+
+    def test_stop_prints_nothing_for_a_stop_keyword(
+        self,
+        transcript_path: Path,
+        fake_slack_web_api: FakeSlackWebApi,
+    ) -> None:
+        """Print nothing for a stop keyword, so Claude stops as it would without hookbell."""
+        queue_reply(fake_slack_web_api, "quit")
+
+        result = CliRunner().invoke(cli.main, ["--wait-reply"], input=hook_payload(transcript_path, "Stop"))
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    def test_permission_request_allows_on_an_allow_keyword(
+        self,
+        transcript_path: Path,
+        fake_slack_web_api: FakeSlackWebApi,
+    ) -> None:
+        """Print an allow decision for an exact allow keyword."""
+        queue_reply(fake_slack_web_api, "ok")
+
+        result = CliRunner().invoke(
+            cli.main,
+            ["--wait-reply"],
+            input=hook_payload(transcript_path, "PermissionRequest"),
+        )
+
+        assert result.exit_code == 0
+        assert json.loads(result.output)["hookSpecificOutput"]["decision"] == {"behavior": "allow"}
+
+    def test_permission_request_denies_a_near_miss_of_an_allow_keyword(
+        self,
+        transcript_path: Path,
+        fake_slack_web_api: FakeSlackWebApi,
+    ) -> None:
+        """Deny a reply that only nearly matches an allow keyword, such as "ok!"."""
+        queue_reply(fake_slack_web_api, "ok!")
+
+        result = CliRunner().invoke(
+            cli.main,
+            ["--wait-reply"],
+            input=hook_payload(transcript_path, "PermissionRequest"),
+        )
+
+        assert result.exit_code == 0
+        assert json.loads(result.output)["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+
+    def test_prints_nothing_on_timeout(self, transcript_path: Path, fake_slack_web_api: FakeSlackWebApi) -> None:
+        """Print nothing once the reply timeout passes, leaving the decision to the terminal."""
+        fake_slack_web_api.queue("chat.postMessage", {"ok": True, "ts": PARENT_TS})
+        fake_slack_web_api.queue("conversations.replies", {"ok": True, "messages": []})
+
+        result = CliRunner().invoke(
+            cli.main,
+            ["--wait-reply", "--reply-timeout", "10"],
+            input=hook_payload(transcript_path, "PermissionRequest"),
+        )
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    def test_stop_prints_nothing_once_a_message_is_queued_at_the_terminal(
+        self,
+        transcript_path: Path,
+        fake_slack_web_api: FakeSlackWebApi,
+        fake_clock: FakeClock,
+    ) -> None:
+        """Stop waiting and print nothing once the user sends a message at the terminal, so Claude Code handles it."""
+        fake_slack_web_api.queue("chat.postMessage", {"ok": True, "ts": PARENT_TS})
+        fake_slack_web_api.queue("conversations.replies", {"ok": True, "messages": []})
+        enqueue = {"type": "queue-operation", "operation": "enqueue", "content": "Run the tests too"}
+
+        def send_message_at_terminal() -> None:
+            with transcript_path.open("a", encoding="utf-8") as file:
+                file.write(json.dumps(enqueue) + "\n")
+
+        fake_clock.during_next_sleep.append(send_message_at_terminal)
+
+        result = CliRunner().invoke(cli.main, ["--wait-reply"], input=hook_payload(transcript_path, "Stop"))
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        assert fake_clock.sleeps == [5.0]
+        assert fake_slack_web_api.params_of("conversations.replies") == []
+
+    def test_prints_nothing_and_exits_0_on_failure(
+        self,
+        transcript_path: Path,
+        fake_slack_web_api: FakeSlackWebApi,
+    ) -> None:
+        """Print nothing and still exit 0 when Slack fails, never falling back to an allow."""
+        fake_slack_web_api.queue("chat.postMessage", {"ok": False, "error": "channel_not_found"})
+
+        result = CliRunner().invoke(
+            cli.main,
+            ["--wait-reply"],
+            input=hook_payload(transcript_path, "PermissionRequest"),
+        )
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    def test_notifies_other_events_through_the_webhook_without_waiting(
+        self,
+        transcript_path: Path,
+        urlopen: MagicMock,
+    ) -> None:
+        """Notify events that take no reply through the webhook, without waiting."""
+        result = CliRunner().invoke(cli.main, ["--wait-reply"], input=hook_payload(transcript_path, "Notification"))
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        assert [call.args[0].full_url for call in urlopen.call_args_list] == [WEBHOOK_URL]
+
+    def test_notifies_without_waiting_when_sns_is_configured(
+        self,
+        transcript_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        mocker: MockerFixture,
+        urlopen: MagicMock,
+    ) -> None:
+        """Leave the SNS-configured setup on its usual one-way path, since SNS has no way to receive a reply."""
+        monkeypatch.setenv("HOOKBELL_SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:hookbell")
+        monkeypatch.delenv("SLACK_WEBHOOK_URL")
+        session = mocker.patch("hookbell.notifiers.sns.boto3.Session")
+
+        result = CliRunner().invoke(cli.main, ["--wait-reply"], input=hook_payload(transcript_path, "Stop"))
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        session.return_value.client.return_value.publish.assert_called_once()
+        urlopen.assert_not_called()
+
+    def test_notifies_through_the_webhook_without_the_option(
+        self,
+        transcript_path: Path,
+        urlopen: MagicMock,
+    ) -> None:
+        """Keep notifying through the webhook without waiting when --wait-reply isn't given."""
+        result = CliRunner().invoke(cli.main, input=hook_payload(transcript_path, "Stop"))
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        assert [call.args[0].full_url for call in urlopen.call_args_list] == [WEBHOOK_URL]
+
+
+class TestMainWaitReplyWithoutBotSettings:
+    """Tests for main() with --wait-reply when the Slack bot isn't configured."""
+
+    def test_falls_back_to_the_webhook(self, transcript_path: Path, urlopen: MagicMock) -> None:
+        result = CliRunner().invoke(cli.main, ["--wait-reply"], input=hook_payload(transcript_path, "Stop"))
+
+        assert result.exit_code == 0
+        assert result.output == ""
+        assert [call.args[0].full_url for call in urlopen.call_args_list] == [WEBHOOK_URL]
 
 
 class TestMainLogging:

@@ -8,6 +8,12 @@ dev = [
     # hookbell/notifiers/sns.py's session.client("sns") call and its publish() response.
     "boto3-stubs[sns]>=1.40.64",
     "bump-my-version",
+    # invokelint[basic] already depends on docformatter; this direct entry only exists so [tool.uv.sources] below can
+    # pin it to a git commit. The fix for removing one of the two blank lines before a top-level class when a module has
+    # no imports (https://github.com/PyCQA/docformatter/issues/350), which conflicts with Ruff's formatter, is not in
+    # any release yet (the latest is 1.7.8). The marker matches invokelint's own, which installs docformatter only on
+    # Python 3.10+, the floor of that commit too.
+    "docformatter; python_version >= '3.10'",
     "invokelint[basic]>=0.19.0",
     "pytest-mock>=3.11.1",
     "pyvelocity; python_version >= '3.9'",
@@ -74,6 +80,11 @@ repository = "https://github.com/yukihiko-shinoda/hookbell"
 
 [project.entry-points.console_scripts]
 hookbell = "hookbell.cli:main"
+
+[tool.uv.sources]
+# Pinned by full SHA-1 rather than a branch, so the lock and every rebuild resolve to the same code. Move it to a
+# release tag once one includes the fix above.
+docformatter = { git = "https://github.com/PyCQA/docformatter", rev = "e913d46542aec8bb65175a490805c798d7c5048d" }
 
 [tool.bandit.assert_used]
 skips = ["tests/*"]

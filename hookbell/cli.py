@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from logging import DEBUG
@@ -16,10 +17,17 @@ import click
 
 from hookbell.claude_code.event import ClaudeCodeHookEvent
 from hookbell.claude_code.stdin import ClaudeCodeStdin
+from hookbell.claude_code.transcript import QueuedMessageWatcher
 from hookbell.notifiers.factory import NotifierFactory
+from hookbell.notifiers.sns import SnsNotifier
 from hookbell.notify_style import PlainTextNotification
+from hookbell.replies.decision import HookDecision
+from hookbell.replies.slack import SlackReplyChannel
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+# 60 seconds below Claude Code's default command hook timeout (600), leaving room to post the timeout notice before
+# Claude Code cancels the hook and discards its output.
+DEFAULT_REPLY_TIMEOUT_SECONDS = 540
 
 
 def _cache_home() -> Path:
@@ -57,8 +65,7 @@ def configure_logging(level: str | None, *, dangerously_debug_all_loggers: bool 
     Args:
         level: Level for hookbell's own loggers. Third-party loggers stay at WARNING regardless, since their DEBUG
             output (e.g. botocore's wire traces) can contain credentials. None disables logging entirely.
-        dangerously_debug_all_loggers: Set the root logger, and so every third-party logger, to DEBUG. Overrides
-            level.
+        dangerously_debug_all_loggers: Set the root logger, and so every third-party logger, to DEBUG. Overrides level.
     """
     if dangerously_debug_all_loggers:
         click.echo(
@@ -92,20 +99,66 @@ def configure_logging(level: str | None, *, dangerously_debug_all_loggers: bool 
     is_flag=True,
     help="Write DEBUG logs of every library, including credentials in AWS SDK wire traces, to the log file.",
 )
-def main(log_level: str | None, *, dangerously_debug_all_loggers: bool) -> int:
+@click.option(
+    "--wait-reply",
+    is_flag=True,
+    help=(
+        "On Stop and PermissionRequest hook events, post through the Slack bot, wait for a reply in the thread, and "
+        "print it as the hook's decision. Other events are notified as usual."
+    ),
+)
+@click.option(
+    "--reply-timeout",
+    envvar="HOOKBELL_REPLY_TIMEOUT",
+    type=click.IntRange(min=1),
+    default=DEFAULT_REPLY_TIMEOUT_SECONDS,
+    show_default=True,
+    help="Seconds --wait-reply waits for a reply. Keep it below the hook's timeout in Claude Code settings.",
+)
+def main(log_level: str | None, reply_timeout: int, *, dangerously_debug_all_loggers: bool, wait_reply: bool) -> int:
     """Notify Slack, either as a Claude Code hook or from any piped input.
 
     Reads stdin (unless it is a TTY) and decides which mode applies: a Claude Code hook payload (JSON carrying
-    "transcript_path") is reported through its referenced transcript; anything else is posted as free-form text.
+    "transcript_path") is reported through its referenced transcript; anything else is posted as free-form text. With
+    --wait-reply, a Stop or PermissionRequest hook event additionally waits for a Slack reply and prints it as the
+    hook's decision.
     """
     configure_logging(log_level, dangerously_debug_all_loggers=dangerously_debug_all_loggers)
     raw_stdin = "" if sys.stdin.isatty() else sys.stdin.read()
     claude_code_stdin = ClaudeCodeStdin.parse(raw_stdin) if raw_stdin else None
     if claude_code_stdin is not None:
-        _notify_claude_code_hook(claude_code_stdin)
+        _handle_claude_code_hook(claude_code_stdin, wait_reply=wait_reply, reply_timeout=reply_timeout)
     else:
         _notify_plain_text(raw_stdin)
     return 0
+
+
+def _handle_claude_code_hook(claude_code_stdin: ClaudeCodeStdin, *, wait_reply: bool, reply_timeout: int) -> None:
+    decision = HookDecision.for_event(claude_code_stdin.hook_event_name) if wait_reply else None
+    # SNS configured alongside the bot means SNS is the chosen destination, and SNS has no way to receive a reply.
+    if decision is None or not SlackReplyChannel.is_configured() or SnsNotifier.is_configured():
+        _notify_claude_code_hook(claude_code_stdin)
+        return
+    _ask_claude_code_hook(claude_code_stdin, decision, reply_timeout)
+
+
+def _ask_claude_code_hook(claude_code_stdin: ClaudeCodeStdin, decision: HookDecision, reply_timeout: int) -> None:
+    # Reason: same broad failure surface as _notify_claude_code_hook below. Any failure prints nothing, so Claude Code
+    # falls back to the user at the terminal; a failure must never turn into an "allow":
+    # - Pylint broad-exception-caught (W0718): no narrower alternative fits an evolving surface
+    #   https://pylint.readthedocs.io/en/latest/user_guide/messages/warning/broad-exception-caught.html
+    try:
+        # Created before posting, so a message the user sends while the post is still in flight counts too.
+        queued_message_watcher = QueuedMessageWatcher(claude_code_stdin.transcript_path)
+        text = f"{ClaudeCodeHookEvent(claude_code_stdin).text}\n\n{decision.hint}"
+        channel = SlackReplyChannel.from_environment()
+        reply = channel.ask(text, reply_timeout, queued_message_watcher.has_queued_message)
+        output = None if reply is None else decision.to_output(reply)
+    except Exception:  # pylint: disable=broad-exception-caught
+        getLogger(__name__).exception("Failed to wait for a reply to Claude Code hook event")
+        return
+    if output is not None:
+        click.echo(json.dumps(output))
 
 
 def _notify_claude_code_hook(claude_code_stdin: ClaudeCodeStdin) -> None:

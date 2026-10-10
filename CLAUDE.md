@@ -80,6 +80,44 @@ filesystem side effects. Tests isolate `XDG_CACHE_HOME` and restore the `hookbel
 fixtures in `tests/conftest.py`; `TestConfigureLogging` checks effective levels in a fresh interpreter because under
 pytest the root logger already has handlers, which turns `basicConfig()` into a no-op.
 
+### Waiting for a Slack reply (`hookbell/replies/`, `--wait-reply`)
+
+With `--wait-reply`, `_handle_claude_code_hook` sends `Stop` and `PermissionRequest` events (the only ones whose
+hook output can carry a decision) to `_ask_claude_code_hook` instead of the one-way notifier. It falls back to the
+one-way path when `SlackCredentials` isn't fully configured, or when SNS is configured (SNS can't receive replies).
+The one design rule: whenever hookbell can't clearly honor a reply, it prints **nothing**, so Claude Code falls back
+to the user at the terminal — never `allow`. That covers the following all cases:
+
+- Any exception
+- A timeout with no reply
+- A `Stop` reply that is a stop keyword
+
+- `base.py`: `ReplyChannel` ABC (`ask(text, timeout) -> Reply | None`), kept separate from `Notifier` so SNS isn't
+  affected. `Reply.normalized` applies NFKC + `strip()` + `casefold()` but keeps punctuation, so `ok!` never matches.
+- `slack.py` (`SlackReplyChannel`): posts with `chat.postMessage`, then polls `conversations.replies` every 5 s until
+  `--reply-timeout`, honoring `Retry-After` on HTTP 429, and posts a timeout notice in the thread. It deliberately
+  doesn't use Socket Mode: Socket Mode delivers each event to only one of the app's connections, so sessions waiting
+  in parallel would steal each other's replies.
+- Terminal input ends the wait early: Claude Code queues a message the user sends while a hook runs and appends a
+  `queue-operation` entry with `operation: "enqueue"` to the transcript right away. `QueuedMessageWatcher`
+  (`hookbell/claude_code/transcript.py`) reads only what was appended since hookbell started, and
+  `SlackReplyChannel` checks it before every poll; on a hit it posts a notice in the thread and returns `None`, so
+  hookbell prints nothing and Claude Code sends the queued message. This entry type is not a documented Claude Code
+  interface, so a format change silently degrades to waiting until the timeout.
+- `reply_filter.py` (`ReplyFilter`): accepts a message newer than the parent (`Decimal` ts compare), from the allowed
+  user, with no `bot_id` or `subtype`.
+- `decision.py` (`HookDecision` → `StopDecision` / `PermissionDecision`): reply → hook output JSON per
+  https://code.claude.com/docs/en/hooks. Only an exact allow keyword allows; anything else denies with
+  `interrupt: false` so Claude continues with the reply as the reason.
+- `slack_web_api.py` (`SlackWebApi`): bot-token Web API client on `urllib` + `certifi`, like the webhook notifier —
+  no `slack_sdk` dependency.
+- `slack_credentials.py`: built on `hookbell/setting.py`'s `Setting` (Docker secret file first, then environment
+  variable). Its `__repr__`s never include the token.
+
+Tests mock only `urlopen` (`FakeSlackWebApi` in `tests/conftest.py`) and the module's `monotonic`/`sleep`
+(`FakeClock`). Both `hookbell.notifiers.slack.request` and `hookbell.replies.slack_web_api.request` are the same
+`urllib.request` module, so a test must use either `FakeSlackWebApi` or the webhook `urlopen` fixture, not both.
+
 ### Claude Code hook event composition (`hookbell/claude_code/`)
 
 - `stdin.py` (`ClaudeCodeStdin`): parses the raw hook JSON. `message` falls back to `hook_event_name`;

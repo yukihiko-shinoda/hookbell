@@ -7,6 +7,7 @@ import json
 from typing import TYPE_CHECKING
 
 from hookbell.claude_code.transcript import FileLastLineGetter
+from hookbell.claude_code.transcript import QueuedMessageWatcher
 from hookbell.claude_code.transcript import Transcript
 
 if TYPE_CHECKING:
@@ -27,6 +28,73 @@ class TestFileLastLineGetter:
         path.write_text('{"line": 1}\n', encoding="utf-8")
 
         assert FileLastLineGetter(path).get_last_line() == '{"line": 1}'
+
+
+ENQUEUE = {"type": "queue-operation", "operation": "enqueue", "content": "Run the tests too"}
+
+
+def append_lines(path: Path, *lines: str) -> None:
+    with path.open("a", encoding="utf-8") as file:
+        file.write("".join(lines))
+
+
+class TestQueuedMessageWatcher:
+    """Tests for QueuedMessageWatcher."""
+
+    def test_detects_an_enqueue_entry_appended_after_creation(self, tmp_path: Path) -> None:
+        """Detect the entry Claude Code appends when the user sends a message while a hook runs."""
+        path = tmp_path / "transcript.jsonl"
+        path.write_text('{"type": "assistant"}\n', encoding="utf-8")
+        watcher = QueuedMessageWatcher(path)
+
+        append_lines(path, json.dumps(ENQUEUE) + "\n")
+
+        assert watcher.has_queued_message()
+
+    def test_ignores_an_enqueue_entry_written_before_creation(self, tmp_path: Path) -> None:
+        path = tmp_path / "transcript.jsonl"
+        path.write_text(json.dumps(ENQUEUE) + "\n", encoding="utf-8")
+
+        assert not QueuedMessageWatcher(path).has_queued_message()
+
+    def test_ignores_other_appended_entries(self, tmp_path: Path) -> None:
+        """Ignore metadata, dequeue entries, and lines that aren't JSON objects."""
+        path = tmp_path / "transcript.jsonl"
+        path.write_text("", encoding="utf-8")
+        watcher = QueuedMessageWatcher(path)
+
+        append_lines(
+            path,
+            '{"type": "ai-title", "aiTitle": "title"}\n',
+            '{"type": "queue-operation", "operation": "dequeue"}\n',
+            '["queue-operation"]\n',
+            "not json\n",
+        )
+
+        assert not watcher.has_queued_message()
+
+    def test_reports_each_enqueue_entry_only_once(self, tmp_path: Path) -> None:
+        """Report an entry already checked no more, since each check reads only what was appended since the last."""
+        path = tmp_path / "transcript.jsonl"
+        path.write_text("", encoding="utf-8")
+        watcher = QueuedMessageWatcher(path)
+        append_lines(path, json.dumps(ENQUEUE) + "\n")
+
+        assert watcher.has_queued_message()
+        assert not watcher.has_queued_message()
+
+    def test_waits_for_a_line_still_being_written(self, tmp_path: Path) -> None:
+        """Leave a line without its trailing newline for the next check instead of misreading it."""
+        path = tmp_path / "transcript.jsonl"
+        path.write_text("", encoding="utf-8")
+        watcher = QueuedMessageWatcher(path)
+        line = json.dumps(ENQUEUE)
+
+        append_lines(path, line[:10])
+        assert not watcher.has_queued_message()
+
+        append_lines(path, line[10:] + "\n")
+        assert watcher.has_queued_message()
 
 
 class TestTranscriptReport:
