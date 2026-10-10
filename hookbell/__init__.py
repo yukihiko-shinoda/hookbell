@@ -3,4 +3,4 @@
 
 __author__ = """Yukihiko Shinoda"""
 __email__ = "yuk.hik.future@gmail.com"
-__version__ = "0.3.0"
+__version__ = "0.4.0"

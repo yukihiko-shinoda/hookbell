@@ -21,7 +21,7 @@ dev = [
 
 [project]
 name = "hookbell"
-version = "0.3.0"
+version = "0.4.0"
 description = "Notifies Slack, as a Claude Code hook or as a notify-compatible CLI."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -90,7 +90,7 @@ docformatter = { git = "https://github.com/PyCQA/docformatter", rev = "e913d4654
 skips = ["tests/*"]
 
 [tool.bumpversion]
-current_version = "0.3.0"
+current_version = "0.4.0"
 commit = true
 tag = true
 
