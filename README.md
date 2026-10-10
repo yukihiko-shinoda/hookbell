@@ -94,6 +94,73 @@ built from that transcript: the assistant's own last message when there is one, 
 the pending permission request otherwise. A failed notification here is swallowed rather than raised,
 so a flaky network never turns into hook-failure noise; turn on logging (below) to see why it failed.
 
+### How do I answer Claude from Slack?
+
+Add `--wait-reply` to the `Stop` and `PermissionRequest` hooks. Hookbell then posts the message
+through a Slack bot and waits for your reply in its thread:
+
+| Event | Your reply | What Claude Code does |
+| --- | --- | --- |
+| `Stop` | Any text | Keeps working, with your reply as its next instruction |
+| `Stop` | Exactly `stop`, `quit`, or `q` | Stops as usual |
+| `PermissionRequest` | Exactly `ok`, `yes`, or `y` | Allows the tool call |
+| `PermissionRequest` | Anything else | Denies the tool call, and Claude reads your reply as the reason |
+| Either | No reply before the timeout | Waits for you at the terminal as usual |
+
+Keywords match only exactly, so a speech-to-text slip such as `ok!` or `yes.` denies rather than
+allows. Matching ignores only the following all differences:
+
+- Letter case
+- Surrounding spaces
+- Full-width letters (`ＯＫ` matches `ok`)
+
+Whenever anything goes wrong,
+hookbell prints nothing and the decision stays with you at the terminal.
+
+When Claude keeps working on your `Stop` reply, Claude Code shows that reply under a
+`Stop hook error:` label. This label is how Claude Code displays a `Stop` hook's reason to continue;
+nothing has failed.
+
+The terminal stays usable while hookbell waits, as follows:
+
+| What you do at the terminal | What happens |
+| --- | --- |
+| Answer a `PermissionRequest` dialog | Your terminal answer wins. Hookbell keeps waiting until the timeout and posts its timeout notice, so a later reply in that thread is ignored |
+| Send a message while `Stop` waits | Hookbell notices it within 5 seconds, stops waiting, and says so in the thread. Claude Code then sends your message, and a later reply in that thread is ignored |
+| Press Esc while `Stop` waits | The wait stops and Claude Code returns to the prompt. No timeout notice is posted, and a later reply in that thread is ignored |
+
+Set the hook's `timeout` above `--reply-timeout` (540 seconds by default), so Claude Code doesn't
+cancel hookbell before it can print the decision:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "uvx hookbell --wait-reply", "timeout": 600 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+This needs a Slack app of your own, installed to your workspace and invited to the channel:
+
+| Setting | Docker secret | Environment variable |
+| --- | --- | --- |
+| Bot token (`xoxb-`) with `chat:write` and `channels:history` (`groups:history` for a private channel) | `/run/secrets/slack_bot_token` | `SLACK_BOT_TOKEN` |
+| Channel ID to post in | `/run/secrets/hookbell_slack_channel_id` | `HOOKBELL_SLACK_CHANNEL_ID` |
+| Your Slack member ID; replies from anyone else are ignored | `/run/secrets/hookbell_slack_allowed_user_id` | `HOOKBELL_SLACK_ALLOWED_USER_ID` |
+
+Hookbell checks the thread every 5 seconds and doesn't use Socket Mode, so several sessions can wait
+at once without taking each other's replies. Without these settings, or with SNS configured,
+`--wait-reply` falls back to the usual one-way notification. `Notification` events never wait.
+
+[Setting up `--wait-reply`](https://github.com/yukihiko-shinoda/hookbell/blob/main/docs/setup-wait-reply.md) walks through the whole setup step by step, from
+adding the bot token to your Slack app to trying each kind of reply.
+
 ### How do I see why a notification failed?
 
 Hookbell writes no log by default. Add `--log-level` to the command (or set `HOOKBELL_LOG_LEVEL`) to

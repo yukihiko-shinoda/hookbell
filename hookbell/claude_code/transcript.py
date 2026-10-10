@@ -40,6 +40,39 @@ class FileLastLineGetter:
             file_pointer.seek(-2, os.SEEK_CUR)
 
 
+class QueuedMessageWatcher:
+    """Detects a message the user sends at the terminal while a hook is still running.
+
+    Claude Code holds such a message in a queue until every hook finishes, and appends a queue-operation entry with
+    operation "enqueue" to the transcript the moment the user sends it. Only entries appended after this watcher was
+    created count, so a message queued and handled earlier in the session never does.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.offset = path.stat().st_size
+
+    def has_queued_message(self) -> bool:
+        """Return whether an enqueue entry was appended since the last check."""
+        with self.path.open("rb") as file_pointer:
+            file_pointer.seek(self.offset)
+            appended = file_pointer.read()
+        # A line still being written has no trailing newline yet, so it waits for the next check.
+        complete = appended[: appended.rfind(b"\n") + 1]
+        self.offset += len(complete)
+        return any(self._is_enqueue(line) for line in complete.splitlines())
+
+    @staticmethod
+    def _is_enqueue(line: bytes) -> bool:
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            return False
+        return (
+            isinstance(entry, dict) and entry.get("type") == "queue-operation" and entry.get("operation") == "enqueue"
+        )
+
+
 class Transcript:
     """A Claude Code transcript.
 

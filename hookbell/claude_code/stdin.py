@@ -30,6 +30,11 @@ class ClaudeCodeStdin:
         return cls(data)
 
     @property
+    def hook_event_name(self) -> str:
+        """Return the hook's event name, or an empty string when the payload lacks one."""
+        return str(self.data.get("hook_event_name", ""))
+
+    @property
     def message(self) -> str:
         """Return the hook's message, falling back to its event name."""
         return str(self.data.get("message") or self.data.get("hook_event_name", "Notification"))
