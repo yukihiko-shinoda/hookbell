@@ -1,7 +1,7 @@
 # Hookbell
 
 [![Test](https://github.com/yukihiko-shinoda/hookbell/workflows/Test/badge.svg)](https://github.com/yukihiko-shinoda/hookbell/actions?query=workflow%3ATest)
-[![CodeQL](https://github.com/yukihiko-shinoda/hookbell/workflows/CodeQL/badge.svg)](https://github.com/yukihiko-shinoda/hookbell/actions?query=workflow%3ACodeQL)
+[![CodeQL](https://github.com/yukihiko-shinoda/hookbell/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/yukihiko-shinoda/hookbell/actions/workflows/github-code-scanning/codeql)
 [![Code Coverage](https://qlty.sh/gh/yukihiko-shinoda/projects/hookbell/coverage.svg)](https://qlty.sh/gh/yukihiko-shinoda/projects/hookbell)
 [![Maintainability](https://qlty.sh/gh/yukihiko-shinoda/projects/hookbell/maintainability.svg)](https://qlty.sh/gh/yukihiko-shinoda/projects/hookbell)
 [![Dependabot](https://flat.badgen.net/github/dependabot/yukihiko-shinoda/hookbell?icon=dependabot)](https://github.com/yukihiko-shinoda/hookbell/security/dependabot)
